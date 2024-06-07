@@ -1,6 +1,7 @@
 package application
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -55,4 +56,46 @@ func (b *BankService) FindExchangeRate(fromCur string, toCur string, ts time.Tim
 	}
 
 	return float64(exchangeRate.Rate)
+}
+
+func (b *BankService) CalculateTransactionSummary(tcur *dbank.TransactionSummary, trans dbank.Transaction) error {
+	switch trans.TransactionType {
+	case dbank.TransactionTypeIn:
+		tcur.SumIn += trans.Amount
+	case dbank.TransactionTypeOut:
+		tcur.SumOut += trans.Amount
+	default:
+		return fmt.Errorf("unknown transaction type %v", trans.TransactionType)
+	}
+
+	tcur.SumTotal = tcur.SumIn - tcur.SumOut
+
+	return nil
+}
+
+func (b *BankService) CreateTransaction(acct string, t dbank.Transaction) (uuid.UUID, error) {
+	newuuid := uuid.New()
+	now := time.Now()
+
+	bankAccountOrm, err := b.db.GetBankAccountByAccountNumber(acct)
+
+	if err != nil {
+		log.Printf("Can't create transaction for %v : %v\n", acct, err)
+		return uuid.Nil, err
+	}
+
+	transactionOrm := database.BankTransactionOrm{
+		TransactionUuid:      newuuid,
+		AccountUuid:          bankAccountOrm.AccountUuid,
+		TransactionType:      t.TransactionType,
+		TransactionTimestamp: now,
+		Amount:               t.Amount,
+		Notes:                t.Notes,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+
+	savedUuid, err := b.db.CreateTransaction(bankAccountOrm, transactionOrm)
+
+	return savedUuid, err
 }
