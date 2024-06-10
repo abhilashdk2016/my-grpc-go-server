@@ -2,19 +2,31 @@ package grpc
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"time"
 
 	"github.com/abhilashdk2016/my-grpc-go-server/internal/application/domain/bank"
 	bank_proto "github.com/abhilashdk2016/my-grpc-proto/protogen/go/bank-proto"
+	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/genproto/googleapis/type/datetime"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (a *GrpcAdapter) GetCurrentBalance(ctx context.Context, req *bank_proto.CurrentBalanceRequest) (*bank_proto.CurrentBalanceResponse, error) {
 	now := time.Now()
-	bal := a.bankService.FindCurrentBalance(req.AccountNumber)
+	bal, err := a.bankService.FindCurrentBalance(req.AccountNumber)
+	if err != nil {
+		return nil, status.Errorf(
+			codes.FailedPrecondition,
+			"account %v not found", req.AccountNumber,
+		)
+	}
 	return &bank_proto.CurrentBalanceResponse{
 		Amount: bal,
 		CurrentDate: &date.Date{
@@ -35,7 +47,21 @@ func (a *GrpcAdapter) FetchExchangeRates(req *bank_proto.ExchangeRateRequest, st
 			return nil
 		default:
 			now := time.Now().Truncate(time.Second)
-			rate := a.bankService.FindExchangeRate(req.FromCurrency, req.FromCurrency, now)
+			rate, err := a.bankService.FindExchangeRate(req.FromCurrency, req.FromCurrency, now)
+
+			if err != nil {
+				s := status.New(codes.InvalidArgument, "Currency not valid. Please use valid currency for both to and from")
+				s, _ = s.WithDetails(&errdetails.ErrorInfo{
+					Domain: "my-grpc-bank-server",
+					Reason: "INVALID_CURRENCY",
+					Metadata: map[string]string{
+						"from_currency": req.FromCurrency,
+						"to_currency":   req.ToCurrency,
+					},
+				})
+
+				return s.Err()
+			}
 
 			stream.Send(
 				&bank_proto.ExchangeRateResponse{
@@ -129,7 +155,31 @@ func (a *GrpcAdapter) SummarizeTransactions(stream bank_proto.BankService_Summar
 			TransactionType: ttype,
 		}
 
-		_, err = a.bankService.CreateTransaction(req.AccountNumber, tcur)
+		accountuuid, err := a.bankService.CreateTransaction(req.AccountNumber, tcur)
+
+		if err != nil && accountuuid == uuid.Nil {
+			s := status.New(codes.InvalidArgument, err.Error())
+			s, _ = s.WithDetails(&errdetails.BadRequest{
+				FieldViolations: []*errdetails.BadRequest_FieldViolation{
+					{
+						Field:       "account_number",
+						Description: "Invalid Account Number",
+					},
+				},
+			})
+			return s.Err()
+		} else if err != nil && accountuuid != uuid.Nil {
+			s := status.New(codes.InvalidArgument, err.Error())
+			s, _ = s.WithDetails(&errdetails.BadRequest{
+				FieldViolations: []*errdetails.BadRequest_FieldViolation{
+					{
+						Field:       "amount",
+						Description: fmt.Sprintf("Requested amount %v exceeds available banalnce", req.Amount),
+					},
+				},
+			})
+			return s.Err()
+		}
 
 		if err != nil {
 			log.Println("Error while creating transaction :", err)
@@ -184,7 +234,7 @@ func (a *GrpcAdapter) TransferMultiple(stream bank_proto.BankService_TransferMul
 			_, transferSuccess, err := a.bankService.Transfer(tt)
 
 			if err != nil {
-				return err
+				return buildTransferErrorStatusGrpc(err, *req)
 			}
 
 			res := bank_proto.TransferResponse{
@@ -206,5 +256,65 @@ func (a *GrpcAdapter) TransferMultiple(stream bank_proto.BankService_TransferMul
 				log.Fatalln("Error while sending response to client :", err)
 			}
 		}
+	}
+}
+
+func buildTransferErrorStatusGrpc(err error, req bank_proto.TransferRequest) error {
+	switch {
+	case errors.Is(err, bank.ErrTransferSourceAccountNotFound):
+		s := status.New(codes.FailedPrecondition, err.Error())
+		s, _ = s.WithDetails(&errdetails.PreconditionFailure{
+			Violations: []*errdetails.PreconditionFailure_Violation{
+				{
+					Type:        "INVALID_ACCOUNT",
+					Subject:     "Source account not found",
+					Description: fmt.Sprintf("source account (from %v) not found", req.FromAccountNumber),
+				},
+			},
+		})
+
+		return s.Err()
+	case errors.Is(err, bank.ErrTransferDestinationAccountNotFound):
+		s := status.New(codes.FailedPrecondition, err.Error())
+		s, _ = s.WithDetails(&errdetails.PreconditionFailure{
+			Violations: []*errdetails.PreconditionFailure_Violation{
+				{
+					Type:        "INVALID_ACCOUNT",
+					Subject:     "Destination account not found",
+					Description: fmt.Sprintf("destination account (to %v) not found", req.ToAccountNumber),
+				},
+			},
+		})
+
+		return s.Err()
+	case errors.Is(err, bank.ErrTransferRecordFailed):
+		s := status.New(codes.Internal, err.Error())
+		s, _ = s.WithDetails(&errdetails.Help{
+			Links: []*errdetails.Help_Link{
+				{
+					Url:         "my-grpc-bank.com/faq",
+					Description: "Bank FAQ",
+				},
+			},
+		})
+
+		return s.Err()
+	case errors.Is(err, bank.ErrTransferTransactionPair):
+		s := status.New(codes.InvalidArgument, err.Error())
+		s, _ = s.WithDetails(&errdetails.ErrorInfo{
+			Domain: "my-grpc-bank.com",
+			Reason: "TRANSACTION_PAIR_FAILED",
+			Metadata: map[string]string{
+				"from_account": req.FromAccountNumber,
+				"to_account":   req.ToAccountNumber,
+				"currency":     req.Currency,
+				"amount":       fmt.Sprintf("%f", req.Amount),
+			},
+		})
+
+		return s.Err()
+	default:
+		s := status.New(codes.Unknown, err.Error())
+		return s.Err()
 	}
 }
