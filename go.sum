@@ -5,8 +5,8 @@ github.com/Masterminds/semver/v3 v3.1.1 h1:hLg3sBzpNErnxhQtUy/mmLR2I9foDujNK030I
 github.com/Masterminds/semver/v3 v3.1.1/go.mod h1:VPu/7SZ7ePZ3QOrcuXROw5FAcLl4a0cBrbBpGY/8hQs=
 github.com/Microsoft/go-winio v0.6.1 h1:9/kr64B9VUZrLm5YYwbGtUJnMgqWVOdUAXu6Migciow=
 github.com/Microsoft/go-winio v0.6.1/go.mod h1:LRdKpFKfdobln8UmuiYcKPot9D2v6svN5+sAH+4kjUM=
-github.com/abhilashdk2016/my-grpc-proto v0.0.4 h1:OGdBAZKkMv8SLmIv9MVntiZgd3+bgX6nx6OZcrLV9DQ=
-github.com/abhilashdk2016/my-grpc-proto v0.0.4/go.mod h1:SJdYiPlQPTL30DSmkFsK7CP3WJKo6pa+EZZmsPgwRzU=
+github.com/abhilashdk2016/my-grpc-proto v0.0.5 h1:CejY6Qcmy2PAn/Or7/Tx6cPaZ2P/7xMNhietb/cXW0k=
+github.com/abhilashdk2016/my-grpc-proto v0.0.5/go.mod h1:SJdYiPlQPTL30DSmkFsK7CP3WJKo6pa+EZZmsPgwRzU=
 github.com/cockroachdb/apd v1.1.0 h1:3LFP3629v+1aKXU5Q37mxmRxX/pIu1nijXydLShEq5I=
 github.com/cockroachdb/apd v1.1.0/go.mod h1:8Sl8LxpKi29FqWXR16WEFZRNSz3SoPzUzeMeY4+DwBQ=
 github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=

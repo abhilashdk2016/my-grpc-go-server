@@ -65,3 +65,62 @@ func (a *DatabaseAdapter) CreateTransaction(acct BankAccountOrm, t BankTransacti
 	tx.Commit()
 	return t.TransactionUuid, nil
 }
+
+func (a *DatabaseAdapter) CreateTransfer(transfer BankTransferOrm) (uuid.UUID, error) {
+	if err := a.db.Create(transfer).Error; err != nil {
+		return uuid.Nil, err
+	}
+
+	return transfer.TransferUuid, nil
+}
+func (a *DatabaseAdapter) CreateTransferTransactionPair(fromAccountOrm BankAccountOrm, toAccountOrm BankAccountOrm, fromTransactionOrm BankTransactionOrm, toTransactionOrm BankTransactionOrm) (bool, error) {
+	tx := a.db.Begin()
+
+	if err := tx.Create(fromTransactionOrm).Error; err != nil {
+		tx.Rollback()
+		return false, err
+	}
+
+	if err := tx.Create(toTransactionOrm).Error; err != nil {
+		tx.Rollback()
+		return false, err
+	}
+
+	fromAccountBalance := fromAccountOrm.CurrentBalance - fromTransactionOrm.Amount
+	if err := tx.Model(&fromAccountOrm).Updates(
+		map[string]interface{}{
+			"current_balance": fromAccountBalance,
+			"updated_at":      time.Now(),
+		},
+	).Error; err != nil {
+		tx.Rollback()
+		return false, err
+	}
+
+	toAccountBalance := toAccountOrm.CurrentBalance + toTransactionOrm.Amount
+	if err := tx.Model(&toAccountOrm).Updates(
+		map[string]interface{}{
+			"current_balance": toAccountBalance,
+			"updated_at":      time.Now(),
+		},
+	).Error; err != nil {
+		tx.Rollback()
+		return false, err
+	}
+
+	tx.Commit()
+
+	return true, nil
+}
+func (a *DatabaseAdapter) UpdateBankTransferStatus(transfer BankTransferOrm, status bool) error {
+	if err := a.db.Model(&transfer).Updates(
+		map[string]interface{}{
+			"transfer_success": status,
+			"updated_at":       time.Now(),
+		},
+	).Error; err != nil {
+		return err
+	}
+
+	return nil
+}

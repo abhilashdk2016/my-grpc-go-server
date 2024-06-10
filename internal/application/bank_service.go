@@ -99,3 +99,69 @@ func (b *BankService) CreateTransaction(acct string, t dbank.Transaction) (uuid.
 
 	return savedUuid, err
 }
+
+func (b *BankService) Transfer(tt dbank.TrasferTransaction) (uuid.UUID, bool, error) {
+	now := time.Now()
+
+	fromAccountOrm, err := b.db.GetBankAccountByAccountNumber(tt.FromAccountNumber)
+
+	if err != nil {
+		log.Printf("Can't find transfer from account %v : %v\n", tt.FromAccountNumber, err)
+		return uuid.Nil, false, err
+	}
+
+	toAccountOrm, err := b.db.GetBankAccountByAccountNumber(tt.ToAccountNumber)
+
+	if err != nil {
+		log.Printf("Can't find transfer to account %v : %v\n", tt.ToAccountNumber, err)
+		return uuid.Nil, false, err
+	}
+
+	fromTransactionOrm := database.BankTransactionOrm{
+		TransactionUuid:      uuid.New(),
+		TransactionTimestamp: now,
+		TransactionType:      dbank.TransactionTypeOut,
+		AccountUuid:          fromAccountOrm.AccountUuid,
+		Amount:               tt.Amount,
+		Notes:                "Transfer out to " + tt.ToAccountNumber,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+
+	toTransactionOrm := database.BankTransactionOrm{
+		TransactionUuid:      uuid.New(),
+		TransactionTimestamp: now,
+		TransactionType:      dbank.TransactionTypeIn,
+		AccountUuid:          toAccountOrm.AccountUuid,
+		Amount:               tt.Amount,
+		Notes:                "Transfer in to " + tt.FromAccountNumber,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+
+	newTransferUUid := uuid.New()
+
+	transferOrm := database.BankTransferOrm{
+		TransferUuid:      newTransferUUid,
+		FromAccountUuid:   fromAccountOrm.AccountUuid,
+		ToAccountUuid:     toAccountOrm.AccountUuid,
+		Currency:          tt.Currency,
+		Amount:            tt.Amount,
+		TransferTimestamp: now,
+		TransferSuccess:   false,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+
+	if _, err := b.db.CreateTransfer(transferOrm); err != nil {
+		log.Printf("Can't create transfer from %v to %v : %v\n", tt.FromAccountNumber, tt.ToAccountNumber, err)
+		return uuid.Nil, false, err
+	}
+
+	if transferPairSuccess, err := b.db.CreateTransferTransactionPair(fromAccountOrm, toAccountOrm, fromTransactionOrm, toTransactionOrm); transferPairSuccess {
+		b.db.UpdateBankTransferStatus(transferOrm, true)
+		return newTransferUUid, true, nil
+	} else {
+		return newTransferUUid, false, err
+	}
+}

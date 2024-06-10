@@ -29,3 +29,10 @@ type TransactionSummary struct {
 	SumOut        float64
 	SumTotal      float64
 }
+
+type TrasferTransaction struct {
+	FromAccountNumber string
+	ToAccountNumber   string
+	Currency          string
+	Amount            float64
+}

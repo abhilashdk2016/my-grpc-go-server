@@ -35,7 +35,7 @@ require (
 )
 
 require (
-	github.com/abhilashdk2016/my-grpc-proto v0.0.4
+	github.com/abhilashdk2016/my-grpc-proto v0.0.5
 	github.com/golang-migrate/migrate/v4 v4.17.1
 	github.com/jackc/pgx/v4 v4.18.3
 	golang.org/x/net v0.26.0 // indirect
